@@ -1,4 +1,11 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
+# Copyright 2010-2016 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
 #
 # ====================================================================
 # Written by Andy Polyakov <appro@openssl.org> for the OpenSSL
@@ -88,7 +95,7 @@
 # where Tproc is time required for Karatsuba pre- and post-processing,
 # is more realistic estimate. In this case it gives ... 1.91 cycles.
 # Or in other words, depending on how well we can interleave reduction
-# and one of the two multiplications the performance should be betwen
+# and one of the two multiplications the performance should be between
 # 1.91 and 2.16. As already mentioned, this implementation processes
 # one byte out of 8KB buffer in 2.10 cycles, while x86_64 counterpart
 # - in 2.02. x86_64 performance is better, because larger register
@@ -128,6 +135,9 @@
 $0 =~ m/(.*[\/\\])[^\/\\]+$/; $dir=$1;
 push(@INC,"${dir}","${dir}../../perlasm");
 require "x86asm.pl";
+
+$output=pop;
+open STDOUT,">$output";
 
 &asm_init($ARGV[0],"ghash-x86.pl",$x86only = $ARGV[$#ARGV] eq "386");
 
@@ -358,7 +368,7 @@ $S=12;		# shift factor for rem_4bit
 # effective address calculation and finally merge of value to Z.hi.
 # Reference to rem_4bit is scheduled so late that I had to >>4
 # rem_4bit elements. This resulted in 20-45% procent improvement
-# on contemporary µ-archs.
+# on contemporary Âµ-archs.
 {
     my $cnt;
     my $rem_4bit = "eax";
@@ -712,7 +722,7 @@ sub mmx_loop() {
     &pxor	($red[1],$red[1]);
     &pxor	($red[2],$red[2]);
 
-    # Just like in "May" verson modulo-schedule for critical path in
+    # Just like in "May" version modulo-schedule for critical path in
     # 'Z.hi ^= rem_8bit[Z.lo&0xff^((u8)H[nhi]<<4)]<<48'. Final 'pxor'
     # is scheduled so late that rem_8bit[] has to be shifted *right*
     # by 16, which is why last argument to pinsrw is 2, which
@@ -801,7 +811,7 @@ sub mmx_loop() {
     &bswap	($dat);
     &pshufw	($Zhi,$Zhi,0b00011011);		# 76543210
     &bswap	("ebx");
-    
+
     &cmp	("ecx",&DWP(528+16+8,"esp"));	# are we done?
     &jne	(&label("outer"));
   }
@@ -905,7 +915,7 @@ my ($Xhi,$Xi) = @_;
 	&psllq		($Xi,57);		#
 	&movdqa		($T1,$Xi);		#
 	&pslldq		($Xi,8);
-	&psrldq		($T1,8);		#	
+	&psrldq		($T1,8);		#
 	&pxor		($Xi,$T2);
 	&pxor		($Xhi,$T1);		#
 
@@ -1021,13 +1031,14 @@ my ($Xhi,$Xi) = @_;
 	&pshufd		($T1,$Xn,0b01001110);	# H*Ii+1
 	&movdqa		($Xhn,$Xn);
 	&pxor		($T1,$Xn);		#
+	&lea		($inp,&DWP(32,$inp));	# i+=2
 
 	&pclmulqdq	($Xn,$Hkey,0x00);	#######
 	&pclmulqdq	($Xhn,$Hkey,0x11);	#######
-	&movups		($Hkey,&QWP(16,$Htbl));	# load H^2
 	&pclmulqdq	($T1,$T3,0x00);		#######
+	&movups		($Hkey,&QWP(16,$Htbl));	# load H^2
+	&nop		();
 
-	&lea		($inp,&DWP(32,$inp));	# i+=2
 	&sub		($len,0x20);
 	&jbe		(&label("even_tail"));
 	&jmp		(&label("mod_loop"));
@@ -1036,22 +1047,23 @@ my ($Xhi,$Xi) = @_;
 	&pshufd		($T2,$Xi,0b01001110);	# H^2*(Ii+Xi)
 	&movdqa		($Xhi,$Xi);
 	&pxor		($T2,$Xi);		#
+	&nop		();
 
 	&pclmulqdq	($Xi,$Hkey,0x00);	#######
 	&pclmulqdq	($Xhi,$Hkey,0x11);	#######
-	&movups		($Hkey,&QWP(0,$Htbl));	# load H
 	&pclmulqdq	($T2,$T3,0x10);		#######
-	&movdqa		($T3,&QWP(0,$const));
+	&movups		($Hkey,&QWP(0,$Htbl));	# load H
 
 	&xorps		($Xi,$Xn);		# (H*Ii+1) + H^2*(Ii+Xi)
+	&movdqa		($T3,&QWP(0,$const));
 	&xorps		($Xhi,$Xhn);
 	 &movdqu	($Xhn,&QWP(0,$inp));	# Ii
 	&pxor		($T1,$Xi);		# aggregated Karatsuba post-processing
 	 &movdqu	($Xn,&QWP(16,$inp));	# Ii+1
 	&pxor		($T1,$Xhi);		#
 
-	&pxor		($T2,$T1);		#
 	 &pshufb	($Xhn,$T3);
+	&pxor		($T2,$T1);		#
 
 	&movdqa		($T1,$T2);		#
 	&psrldq		($T2,8);
@@ -1068,21 +1080,21 @@ my ($Xhi,$Xi) = @_;
 	  &pxor		($T1,$Xi);		#
 	  &psllq	($Xi,1);
 	  &pxor		($Xi,$T1);		#
-	&movups		($T3,&QWP(32,$Htbl));
 	&pclmulqdq	($Xn,$Hkey,0x00);	#######
+	&movups		($T3,&QWP(32,$Htbl));
 	  &psllq	($Xi,57);		#
 	  &movdqa	($T1,$Xi);		#
 	  &pslldq	($Xi,8);
-	  &psrldq	($T1,8);		#	
+	  &psrldq	($T1,8);		#
 	  &pxor		($Xi,$T2);
 	  &pxor		($Xhi,$T1);		#
 	&pshufd		($T1,$Xhn,0b01001110);
 	  &movdqa	($T2,$Xi);		# 2nd phase
 	  &psrlq	($Xi,1);
 	&pxor		($T1,$Xhn);
+	  &pxor		($Xhi,$T2);		#
 	&pclmulqdq	($Xhn,$Hkey,0x11);	#######
 	&movups		($Hkey,&QWP(16,$Htbl));	# load H^2
-	  &pxor		($Xhi,$T2);		#
 	  &pxor		($T2,$Xi);
 	  &psrlq	($Xi,5);
 	  &pxor		($Xi,$T2);		#
@@ -1136,7 +1148,7 @@ my ($Xhi,$Xi) = @_;
 	&movdqu		(&QWP(0,$Xip),$Xi);
 &function_end("gcm_ghash_clmul");
 
-} else {		# Algorith 5. Kept for reference purposes.
+} else {		# Algorithm 5. Kept for reference purposes.
 
 sub reduction_alg5 {	# 19/16 times faster than Intel version
 my ($Xhi,$Xi)=@_;
@@ -1366,6 +1378,8 @@ my ($Xhi,$Xi)=@_;
 
 &asciz("GHASH for x86, CRYPTOGAMS by <appro\@openssl.org>");
 &asm_finish();
+
+close STDOUT;
 
 # A question was risen about choice of vanilla MMX. Or rather why wasn't
 # SSE2 chosen instead? In addition to the fact that MMX runs on legacy
